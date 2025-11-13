@@ -1,0 +1,68 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "250m"
+    max-file: "4"
+
+services:
+  postgres:
+    image: postgres:16.0
+    shm_size: 2g
+    container_name: postgres-chat-container
+    command: postgres -c 'max_connections=500'
+    restart: unless-stopped
+    logging: *default-logging
+    env_file:
+      - .env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - chat_network
+    ports:
+      - "0.0.0.0:${PG_PORT}:${PG_PORT}"
+  migrator:
+    build:
+      context: .
+      dockerfile: docker/migrations.Dockerfile
+    restart: on-failure
+    logging: *default-logging
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: postgres
+    networks:
+      - chat_network
+    env_file:
+      - .env
+  redis:
+    image: "redis/redis-stack:7.4.0-v0"
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - redis-data:/data
+    networks:
+      - chat_network
+  chat-server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    container_name: chat-server-container
+    ports:
+      - "0.0.0.0:${HTTP_PORT_CHAT_EXPOSE}:${HTTP_PORT_CHAT}"
+    logging: *default-logging
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - chat_network
+    env_file:
+      - .env
+
+networks:
+  chat_network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
