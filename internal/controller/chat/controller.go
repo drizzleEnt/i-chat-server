@@ -72,7 +72,7 @@ func (c *implementation) HandleWebSocket(ws *websocket.Conn) {
 
 	c.log.Info("WebSocket client connected", zap.String("local", ws.LocalAddr().String()))
 
-	var msg msg.Message
+	var msg msgdomain.Message
 	for {
 		select {
 		case <-ws.Request().Context().Done():

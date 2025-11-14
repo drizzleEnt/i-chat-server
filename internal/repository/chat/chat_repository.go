@@ -19,6 +19,19 @@ type chatRepository struct {
 	db *sql.DB
 }
 
+// GetChat implements repository.ChatRepository.
+func (c *chatRepository) GetChat(ctx context.Context, chatID string) (*chatdomain.Chat, error) {
+	query := `SELECT uuid, name FROM chats WHERE uuid = $1`
+
+	var chat chatdomain.Chat
+	err := c.db.QueryRowContext(ctx, query, chatID).Scan(&chat.ID, &chat.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	return &chat, nil
+}
+
 // GetChats implements repository.ChatRepository.
 func (c *chatRepository) GetChats(ctx context.Context) ([]*chatdomain.Chat, error) {
 	query := "SELECT uuid, name FROM chats"

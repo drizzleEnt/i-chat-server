@@ -1,7 +1,7 @@
 package chatsrv
 
 import (
-	"chatsrv/internal/domain/msg"
+	msgdomain "chatsrv/internal/domain/msg"
 
 	"golang.org/x/net/websocket"
 )
@@ -20,8 +20,8 @@ type client struct {
 	conn   *websocket.Conn
 }
 
-func (c *client) sendMessage(message msg.Message) error {
-	msg := msg.Message{
+func (c *client) sendMessage(message msgdomain.Message) error {
+	msg := msgdomain.Message{
 		Content:  message.Content,
 		SenderID: message.SenderID,
 		ChatID:   message.ChatID,

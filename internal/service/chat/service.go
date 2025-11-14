@@ -2,10 +2,12 @@ package chatsrv
 
 import (
 	chatdomain "chatsrv/internal/domain/chat"
-	"chatsrv/internal/domain/msg"
+	msgdomain "chatsrv/internal/domain/msg"
 	"chatsrv/internal/repository"
 	"chatsrv/internal/service"
 	"context"
+	"fmt"
+	"log"
 	"sync"
 
 	"golang.org/x/net/websocket"
@@ -16,7 +18,7 @@ var _ service.ChatService = (*chatService)(nil)
 func NewChatService(repo repository.ChatRepository) service.ChatService {
 	s := &chatService{
 		chats:   make(map[string]*chat),
-		msgChan: make(chan msg.Message, 100),
+		msgChan: make(chan msgdomain.Message, 100),
 		repo:    repo,
 	}
 
@@ -29,7 +31,7 @@ type chatService struct {
 	mutex sync.RWMutex
 	chats map[string]*chat
 
-	msgChan chan msg.Message
+	msgChan chan msgdomain.Message
 	repo    repository.ChatRepository
 }
 
@@ -38,7 +40,104 @@ func (c *chatService) GetChats(ctx context.Context) ([]*chatdomain.Chat, error) 
 	return c.repo.GetChats(ctx)
 }
 
-func (c *chatService) GetIncomeMessage(ws *websocket.Conn, msg msg.Message) error {
+func (c *chatService) GetIncomeMessage(ws *websocket.Conn, msg msgdomain.Message) error {
+	switch msg.Action {
+	case string(msgdomain.ActionJoinChat):
+		log.Printf("Handle Join Chat %s user-%s", msg.ChatID, msg.SenderID)
+		return c.handleJoinChat(ws, msg)
+	case string(msgdomain.ActionLeaveChat):
+		log.Printf("Handle Leave Chat %s user-%s", msg.ChatID, msg.SenderID)
+		return c.handleLeaveChat(ws, msg)
+	case string(msgdomain.ActionSendText), string(msgdomain.ActionSendBinary):
+		// For simplicity, we treat both text and binary messages the same way he
+		log.Printf("Handle Send Text to Chat %s user-%s", msg.ChatID, msg.SenderID)
+		c.msgChan <- msg
+		return nil
+	case string(msgdomain.ActionCreateChat):
+		log.Printf("Handle Create Chat %s user-%s", msg.ChatID, msg.SenderID)
+		return c.handleCreateChat(msg)
+	default:
+		// Unknown action
+		return nil
+	}
+
+	return nil
+}
+
+func (c *chatService) handleCreateChat(msg msgdomain.Message) error {
+	c.mutex.RLock()
+	_, ok := c.chats[msg.ChatID]
+	c.mutex.RUnlock()
+	if ok {
+		log.Printf("CreateChat get msg with exist chatID %+v", msg)
+		return fmt.Errorf("already exist chatID %s", msg.ChatID)
+	}
+
+	chat := newChat(msg.ChatID)
+	c.mutex.Lock()
+	c.chats[msg.ChatID] = chat
+	c.mutex.Unlock()
+
+	return nil
+}
+
+func (c *chatService) handleJoinChat(ws *websocket.Conn, msg msgdomain.Message) error {
+	c.mutex.RLock()
+	chat, ok := c.chats[msg.ChatID]
+	c.mutex.RUnlock()
+	if !ok {
+		storedChat, err := c.repo.GetChat(ws.Request().Context(), msg.ChatID)
+		if err != nil {
+			log.Printf("JoinChat failed get chats %+v", msg)
+			return err
+		}
+		chat = newChat(storedChat.ID)
+		c.mutex.Lock()
+		c.chats[msg.ChatID] = chat
+		c.mutex.Unlock()
+	}
+
+	chat.m.RLock()
+	_, ok = chat.clients[msg.SenderID]
+	chat.m.RUnlock()
+	if ok {
+		log.Printf("JoinChat user already in chat %+v", msg)
+		return fmt.Errorf("user %s already in chat %s", msg.SenderID, msg.ChatID)
+	}
+
+	chat.addClient(NewClient(msg.SenderID, msg.ChatID, ws))
+	return nil
+}
+
+func (c *chatService) handleLeaveChat(ws *websocket.Conn, msg msgdomain.Message) error {
+	c.mutex.RLock()
+	chat, ok := c.chats[msg.ChatID]
+	c.mutex.RUnlock()
+	if !ok {
+		log.Printf("LeaveChat get msg with unknown chatID %+v", msg)
+		return fmt.Errorf("unknown chatID %s", msg.ChatID)
+	}
+
+	chat.m.RLock()
+	client, ok := chat.clients[msg.SenderID]
+	chat.m.RUnlock()
+	if !ok {
+		log.Printf("LeaveChat user not found in chat %+v", msg)
+		return fmt.Errorf("user %s not found in chat %s", msg.SenderID, msg.ChatID)
+	}
+
+	chat.m.Lock()
+	delete(chat.clients, client.id)
+	chat.m.Unlock()
+	if len(chat.clients) == 0 {
+		c.mutex.Lock()
+		delete(c.chats, msg.ChatID)
+		c.mutex.Unlock()
+	}
+	return nil
+}
+
+func (c *chatService) handleIncomingMessage(ws *websocket.Conn, msg msgdomain.Message) error {
 	c.mutex.RLock()
 	chat, ok := c.chats[msg.ChatID]
 	c.mutex.RUnlock()
