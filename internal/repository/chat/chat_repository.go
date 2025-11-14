@@ -19,6 +19,21 @@ type chatRepository struct {
 	db *sql.DB
 }
 
+// CreateChat implements repository.ChatRepository.
+func (c *chatRepository) CreateChat(ctx context.Context, chatID string) error {
+	query := `
+	INSERT INTO 
+	chats(uuid, name) 
+	VALUES ($1, $2)
+	ON CONFLICT DO NOTHING`
+	_, err := c.db.ExecContext(ctx, query, chatID, "some name")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // GetChat implements repository.ChatRepository.
 func (c *chatRepository) GetChat(ctx context.Context, chatID string) (*chatdomain.Chat, error) {
 	query := `SELECT uuid, name FROM chats WHERE uuid = $1`

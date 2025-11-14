@@ -67,7 +67,7 @@ func (s *serviceProvider) ChatRepository(ctx context.Context) repository.ChatRep
 
 func (sp *serviceProvider) ChatService(ctx context.Context) service.ChatService {
 	if sp.chatSrv == nil {
-		sp.chatSrv = chatsrv.NewChatService(sp.ChatRepository(ctx))
+		sp.chatSrv = chatsrv.NewChatService(sp.ChatRepository(ctx), sp.Logger(ctx))
 	}
 	return sp.chatSrv
 }

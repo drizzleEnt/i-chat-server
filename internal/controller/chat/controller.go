@@ -5,6 +5,7 @@ import (
 	msgdomain "chatsrv/internal/domain/msg"
 	"chatsrv/internal/service"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"go.uber.org/zap"
@@ -63,11 +64,18 @@ func (c *implementation) GetChats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *implementation) HandleWebSocket(ws *websocket.Conn) {
-	clientID := ""
+	var client msgdomain.Message
 
 	defer func() {
-		if clientID != "" {
-			c.srv.HandleDisconnect(ws, clientID)
+		if client.SenderID != "" {
+			c.srv.HandleDisconnect(ws, client.SenderID)
+
+			msg := msgdomain.Message{
+				Content:  fmt.Sprintf("%s left chat", client.SenderID),
+				SenderID: "SYSTEM",
+				ChatID:   client.ChatID,
+			}
+			c.srv.GetIncomeMessage(ws, msg)
 		}
 		err := ws.Close()
 		if err != nil {
@@ -89,7 +97,7 @@ func (c *implementation) HandleWebSocket(ws *websocket.Conn) {
 				c.log.Info("WebSocket client disconnected", zap.Error(err))
 				return
 			}
-			clientID = msg.SenderID
+			client = msg
 			err = c.srv.GetIncomeMessage(ws, msg)
 			if err != nil {
 				c.log.Error("error getting income message", zap.Error(err))
