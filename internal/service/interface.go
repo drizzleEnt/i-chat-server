@@ -11,4 +11,5 @@ import (
 type ChatService interface {
 	GetIncomeMessage(ws *websocket.Conn, msg msgdomain.Message) error
 	GetChats(ctx context.Context) ([]*chatdomain.Chat, error)
+	HandleDisconnect(ws *websocket.Conn, clientID string)
 }

@@ -2,7 +2,7 @@ package chatctrl
 
 import (
 	"chatsrv/internal/controller"
-	"chatsrv/internal/domain/msg"
+	msgdomain "chatsrv/internal/domain/msg"
 	"chatsrv/internal/service"
 	"encoding/json"
 	"net/http"
@@ -63,7 +63,12 @@ func (c *implementation) GetChats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *implementation) HandleWebSocket(ws *websocket.Conn) {
+	clientID := ""
+
 	defer func() {
+		if clientID != "" {
+			c.srv.HandleDisconnect(ws, clientID)
+		}
 		err := ws.Close()
 		if err != nil {
 			c.log.Error("error close websocket connection", zap.Error(err))
@@ -82,8 +87,9 @@ func (c *implementation) HandleWebSocket(ws *websocket.Conn) {
 			err := websocket.JSON.Receive(ws, &msg)
 			if err != nil {
 				c.log.Info("WebSocket client disconnected", zap.Error(err))
-				break
+				return
 			}
+			clientID = msg.SenderID
 			err = c.srv.GetIncomeMessage(ws, msg)
 			if err != nil {
 				c.log.Error("error getting income message", zap.Error(err))

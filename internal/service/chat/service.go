@@ -35,6 +35,18 @@ type chatService struct {
 	repo    repository.ChatRepository
 }
 
+func (s *chatService) HandleDisconnect(ws *websocket.Conn, clientID string) {
+    s.mutex.Lock()
+    defer s.mutex.Unlock()
+
+    for _, ch := range s.chats {
+        if _, ok := ch.clients[clientID]; ok {
+            ch.removeClient(clientID)
+            log.Printf("Client %s removed from chat %s on disconnect", clientID, ch.chatID)
+        }
+    }
+}
+
 // GetChats implements service.ChatService.
 func (c *chatService) GetChats(ctx context.Context) ([]*chatdomain.Chat, error) {
 	return c.repo.GetChats(ctx)
