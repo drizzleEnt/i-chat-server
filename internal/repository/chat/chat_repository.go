@@ -20,13 +20,13 @@ type chatRepository struct {
 }
 
 // CreateChat implements repository.ChatRepository.
-func (c *chatRepository) CreateChat(ctx context.Context, chatID string) error {
+func (c *chatRepository) CreateChat(ctx context.Context, chatID string, name string) error {
 	query := `
 	INSERT INTO 
 	chats(uuid, name) 
 	VALUES ($1, $2)
 	ON CONFLICT DO NOTHING`
-	_, err := c.db.ExecContext(ctx, query, chatID, "some name")
+	_, err := c.db.ExecContext(ctx, query, chatID, name)
 	if err != nil {
 		return err
 	}

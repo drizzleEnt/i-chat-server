@@ -3,6 +3,7 @@ module chatsrv
 go 1.25.3
 
 require (
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	go.uber.org/zap v1.19.1
 	golang.org/x/net v0.47.0

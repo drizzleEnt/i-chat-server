@@ -8,5 +8,5 @@ import (
 type ChatRepository interface {
 	GetChats(ctx context.Context) ([]*chatdomain.Chat, error)
 	GetChat(ctx context.Context, chatID string) (*chatdomain.Chat, error)
-	CreateChat(ctx context.Context, chatID string) error
+	CreateChat(ctx context.Context, chatID string, name string) error
 }

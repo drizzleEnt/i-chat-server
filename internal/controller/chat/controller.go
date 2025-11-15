@@ -2,6 +2,7 @@ package chatctrl
 
 import (
 	"chatsrv/internal/controller"
+	chatdomain "chatsrv/internal/domain/chat"
 	msgdomain "chatsrv/internal/domain/msg"
 	"chatsrv/internal/service"
 	"encoding/json"
@@ -41,6 +42,33 @@ func NewChatController(opts ...Option) controller.ChatController {
 type implementation struct {
 	log *zap.Logger
 	srv service.ChatService
+}
+
+// CreateChat implements controller.ChatController.
+func (c *implementation) CreateChat(w http.ResponseWriter, r *http.Request) {
+	var req chatdomain.CreateChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.log.Error("failed to decode request", zap.Error(err))
+		http.Error(w, "failed to decode request", http.StatusBadRequest)
+		return
+	}
+
+	chat, err := c.srv.CreateChat(r.Context(), req.Name)
+	if err != nil {
+		c.log.Error("failed to create chat", zap.Error(err))
+		http.Error(w, "failed to create chat", http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := json.Marshal(chat)
+	if err != nil {
+		c.log.Error("failed to marshal chat", zap.Error(err))
+		http.Error(w, "failed to marshal chat", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(resp)
 }
 
 // GetChats implements controller.ChatController.

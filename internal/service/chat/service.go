@@ -7,9 +7,9 @@ import (
 	"chatsrv/internal/service"
 	"context"
 	"fmt"
-	"log"
 	"sync"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/net/websocket"
 )
@@ -36,6 +36,21 @@ type chatService struct {
 	msgChan chan msgdomain.Message
 	repo    repository.ChatRepository
 	log     *zap.Logger
+}
+
+// CreateChat implements service.ChatService.
+func (s *chatService) CreateChat(ctx context.Context, name string) (*chatdomain.Chat, error) {
+	uuid := uuid.New().String()
+
+	err := s.repo.CreateChat(ctx, uuid, name)
+	if err != nil {
+		s.log.Error("CreateChat",
+			zap.Any("msg", name),
+			zap.Error(err))
+		return nil, err
+	}
+
+	return nil, nil
 }
 
 func (s *chatService) HandleDisconnect(ws *websocket.Conn, clientID string) {
@@ -76,42 +91,10 @@ func (c *chatService) GetIncomeMessage(ws *websocket.Conn, msg msgdomain.Message
 			zap.Any("Chat", msg.ChatID))
 		c.msgChan <- msg
 		return nil
-	case string(msgdomain.ActionCreateChat):
-		log.Printf("Handle Create Chat %s user-%s", msg.ChatID, msg.SenderID)
-		c.log.Debug("Handle Create Chat",
-			zap.Any("User", msg.SenderID),
-			zap.Any("Chat", msg.ChatID))
-		return c.handleCreateChat(msg)
 	default:
 		// Unknown action
 		return nil
 	}
-
-	return nil
-}
-
-func (c *chatService) handleCreateChat(msg msgdomain.Message) error {
-	c.mutex.RLock()
-	_, ok := c.chats[msg.ChatID]
-	c.mutex.RUnlock()
-	if ok {
-		c.log.Debug("CreateChat",
-			zap.Any("msg", msg))
-		return fmt.Errorf("already exist chatID %s", msg.ChatID)
-	}
-
-	err := c.repo.CreateChat(context.Background(), msg.ChatID)
-	if err != nil {
-		c.log.Error("CreateChat",
-			zap.Any("msg", msg),
-			zap.Error(err))
-		return err
-	}
-
-	chat := newChat(msg.ChatID)
-	c.mutex.Lock()
-	c.chats[msg.ChatID] = chat
-	c.mutex.Unlock()
 
 	return nil
 }

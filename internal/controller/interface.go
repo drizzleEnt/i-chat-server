@@ -9,4 +9,5 @@ import (
 type ChatController interface {
 	HandleWebSocket(ws *websocket.Conn)
 	GetChats(w http.ResponseWriter, r *http.Request)
+	CreateChat(w http.ResponseWriter, r *http.Request)
 }
