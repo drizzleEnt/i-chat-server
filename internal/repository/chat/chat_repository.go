@@ -39,10 +39,10 @@ func (c *chatRepository) NextChatID(ctx context.Context, chatType int) (int64, e
 }
 
 // CreateChat implements repository.ChatRepository.
-func (c *chatRepository) CreateChat(ctx context.Context, chatType int, name string) error {
+func (c *chatRepository) CreateChat(ctx context.Context, chatType int, name string) (int64, error) {
 	chatID, err := c.NextChatID(ctx, chatType)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	query := `
@@ -52,10 +52,10 @@ func (c *chatRepository) CreateChat(ctx context.Context, chatType int, name stri
 	ON CONFLICT DO NOTHING`
 
 	if _, err := c.db.ExecContext(ctx, query, chatID, name); err != nil {
-		return err
+		return 0, err
 	}
 
-	return nil
+	return chatID, nil
 }
 
 // GetChat implements repository.ChatRepository.

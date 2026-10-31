@@ -43,7 +43,7 @@ type chatService struct {
 
 // CreateChat implements service.ChatService.
 func (s *chatService) CreateChat(ctx context.Context, chatType int, name string) (*chatdomain.Chat, error) {
-	err := s.repo.CreateChat(ctx, chatType, name)
+	chatID, err := s.repo.CreateChat(ctx, chatType, name)
 	if err != nil {
 		s.log.Error("CreateChat",
 			zap.Any("msg", name),
@@ -51,7 +51,7 @@ func (s *chatService) CreateChat(ctx context.Context, chatType int, name string)
 		return nil, err
 	}
 
-	return nil, nil
+	return &chatdomain.Chat{ID: chatID, Name: name}, nil
 }
 
 func (s *chatService) HandleDisconnect(ws *websocket.Conn, clientID string) {

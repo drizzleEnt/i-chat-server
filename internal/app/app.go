@@ -4,6 +4,7 @@ import (
 	"chatsrv/internal/routes"
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -32,29 +33,39 @@ func New(ctx context.Context) (*App, error) {
 }
 
 func (a *App) Run(ctx context.Context) error {
-	// Start the application logic here
-
-	go func() {
-		if err := a.StartHttpServer(ctx); err != nil && err != http.ErrServerClosed {
-			a.serviceProvider.Logger(context.Background()).Error("error start http server", zap.Error(err))
-			os.Exit(1)
-		}
-	}()
-
 	nctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	<-nctx.Done()
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- a.StartHttpServer(nctx) }()
+
+	var runErr error
+	select {
+	case <-nctx.Done():
+	case err := <-serverErr:
+		if err != nil && err != http.ErrServerClosed {
+			runErr = err
+		}
+	}
 
 	a.serviceProvider.Logger(ctx).Info("shutting down the server...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := a.chatServer.Shutdown(shutdownCtx); err != nil {
 		a.serviceProvider.Logger(ctx).Error("error shutting down the server", zap.Error(err))
+		if runErr == nil {
+			runErr = err
+		}
+	}
+	if err := a.serviceProvider.DBClient().Close(); err != nil && runErr == nil {
+		runErr = err
+	}
+	if a.serviceProvider.pool != nil {
+		a.serviceProvider.pool.Close()
 	}
 	a.serviceProvider.Logger(ctx).Info("server shut down successfully")
 
-	return nil
+	return runErr
 }
 
 func (a *App) initDependencies(ctx context.Context) error {
@@ -74,13 +85,17 @@ func (a *App) initDependencies(ctx context.Context) error {
 
 func (a *App) initServiceProvider(ctx context.Context) error {
 	sp := newServiceProvider()
+	sp.Logger(ctx)
+	if err := sp.initDB(ctx); err != nil {
+		return fmt.Errorf("initialize postgres connection: %w", err)
+	}
 
 	a.serviceProvider = sp
 	return nil
 }
 
 func (a *App) initHttpServer(ctx context.Context) error {
-	muxRouter := routes.InitRoutes(a.serviceProvider.ChatController(ctx), a.serviceProvider.DBClient(ctx).PingContext)
+	muxRouter := routes.InitRoutes(a.serviceProvider.ChatController(ctx), a.serviceProvider.DBClient().PingContext)
 
 	a.chatServer = &http.Server{
 		Addr:           a.serviceProvider.HttpConfig().Address(),
@@ -97,11 +112,7 @@ func (a *App) initHttpServer(ctx context.Context) error {
 
 func (a *App) StartHttpServer(ctx context.Context) error {
 	a.serviceProvider.Logger(ctx).Info("HTTP server is running", zap.String("address", a.serviceProvider.HttpConfig().Address()))
-	if err := a.chatServer.ListenAndServe(); err != nil {
-		return err
-	}
-
-	return nil
+	return a.chatServer.ListenAndServe()
 }
 
 func getCore(level zap.AtomicLevel) zapcore.Core {
