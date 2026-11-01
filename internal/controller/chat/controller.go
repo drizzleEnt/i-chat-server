@@ -68,6 +68,7 @@ func (c *implementation) CreateChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	if _, err := w.Write(resp); err != nil {
 		c.log.Error("Create Chat write response", zap.Error(err))
 	}

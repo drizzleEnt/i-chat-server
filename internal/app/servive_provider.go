@@ -11,7 +11,7 @@ import (
 	chatsrv "chatsrv/internal/service/chat"
 	"context"
 	"database/sql"
-	"os"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -43,23 +43,42 @@ func (sp *serviceProvider) HttpConfig() config.HttpConfig {
 	return sp.httpCfg
 }
 
-func (s *serviceProvider) PGConfig() config.PGConfig {
+func (s *serviceProvider) PGConfig() (config.PGConfig, error) {
 	if s.pgConfig == nil {
 		cfg, err := env.NewPGConfig()
 		if err != nil {
-			s.Logger(context.Background()).Error("failed to get pg config", zap.Error(err))
-			os.Exit(1)
+			return nil, err
 		}
 
 		s.pgConfig = cfg
 	}
 
-	return s.pgConfig
+	return s.pgConfig, nil
+}
+
+func (s *serviceProvider) initDB(ctx context.Context) error {
+	cfg, err := s.PGConfig()
+	if err != nil {
+		return err
+	}
+	p, err := pgxpool.New(ctx, cfg.DSN())
+	if err != nil {
+		return err
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := p.Ping(pingCtx); err != nil {
+		p.Close()
+		return err
+	}
+	s.pool = p
+	s.db = stdlib.OpenDBFromPool(p)
+	return nil
 }
 
 func (s *serviceProvider) ChatRepository(ctx context.Context) repository.ChatRepository {
 	if s.chatRepo == nil {
-		s.chatRepo = chatrepository.NewChatRepository(s.DBClient(ctx))
+		s.chatRepo = chatrepository.NewChatRepository(s.db)
 	}
 
 	return s.chatRepo
@@ -91,23 +110,6 @@ func (sp *serviceProvider) Logger(ctx context.Context) *zap.Logger {
 	return sp.logger
 }
 
-func (s *serviceProvider) DBClient(ctx context.Context) *sql.DB {
-	if s.db == nil {
-		pool, err := pgxpool.New(ctx, s.PGConfig().DSN())
-		if err != nil {
-			s.Logger(context.Background()).Error("failed to connect to db", zap.Error(err))
-			os.Exit(1)
-		}
-		s.pool = pool
-
-		dbc := stdlib.OpenDBFromPool(pool)
-		err = dbc.Ping()
-		if err != nil {
-			s.Logger(context.Background()).Error("failed to ping db", zap.Error(err))
-			os.Exit(1)
-		}
-		s.db = dbc
-	}
-
+func (s *serviceProvider) DBClient() *sql.DB {
 	return s.db
 }

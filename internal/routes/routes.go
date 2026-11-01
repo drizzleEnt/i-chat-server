@@ -35,6 +35,9 @@ func InitRoutes(ctrl controller.ChatController, ping func(context.Context) error
 			ctrl.GetChats(w, r)
 		case "POST":
 			ctrl.CreateChat(w, r)
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
 
